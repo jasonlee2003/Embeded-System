@@ -89,10 +89,10 @@ def get_camera_offset():
 #     NPC 區域（套用地圖座標）
 # =======================
 npcs = {
-    "管理大樓": pygame.Rect(900, 600, 80, 80),
-    "圖書館": pygame.Rect(1100, 550, 80, 80),
-    "工學大樓": pygame.Rect(1200, 650, 80, 80),
-    "活動中心": pygame.Rect(1500, 800, 120, 120)
+    "管理大樓": pygame.Rect(686, 714, 80, 80),
+    "圖書館": pygame.Rect(1140, 744, 80, 80),
+    "工學大樓": pygame.Rect(1331, 833, 40, 40),
+    "活動中心": pygame.Rect(1575, 950, 300, 200)
 }
 
 npc_text = {
@@ -191,7 +191,28 @@ while True:
 
     # NPC 檢測（記得用地圖座標）
     current_msg = ""
-    player_rect = pygame.Rect(player_x, player_y, SPRITE_W, SPRITE_H)
+    # 縮小後 sprite 的寬高
+    player_rect = pygame.Rect(player_x, player_y, SPRITE_W, SPRITE_H)# ==== 計算人物「實際畫在畫面上的位置」 ====
+    draw_x = player_x
+    draw_y = player_y + FOOT_OFFSET // 2   # 與 draw_player 完全一致！！！
+
+
+    # ==== hitbox 使用縮小後尺寸 ====
+    hit_w = SPRITE_W // 2
+    hit_h = SPRITE_H // 2
+
+    # ==== 角色 hitbox 必須貼在人物腳底（搖桿型判定） ====
+    player_rect = pygame.Rect(
+        draw_x,
+        draw_y - hit_h,   # 讓 hitbox 從腳往上長
+        hit_w,
+        hit_h
+)
+
+
+
+
+
 
     for name, rect in npcs.items():
         if player_rect.colliderect(rect):
@@ -212,6 +233,12 @@ while True:
 
     # 下方說明欄（永久顯示）
     draw_message_bar()
+    # 顯示世界座標（方便手動調 NPC）
+    mx, my = pygame.mouse.get_pos()
+    world_x = mx + camera[0]
+    world_y = my + camera[1]
+    print("世界座標:", world_x, world_y)
+
 
     pygame.display.update()
     clock.tick(60)
