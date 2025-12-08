@@ -3,37 +3,45 @@ import sys
 
 pygame.init()
 
-# 視窗大小
+# =======================
+# 基本設定
+# =======================
 WIDTH, HEIGHT = 1280, 720
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("長庚大學校園導覽遊戲")
 
 clock = pygame.time.Clock()
 
+# Debug Mode（F1 切換）
+debug_mode = False
+# F2：終端機座標顯示開關
+show_pos = False
+
 # =======================
-#  載入大型地圖
+#  載入地圖
 # =======================
 map_img = pygame.image.load("assets/map.png").convert_alpha()
 MAP_W, MAP_H = map_img.get_width(), map_img.get_height()
-
 print("MAP SIZE =", MAP_W, MAP_H)
 
 # =======================
-#  Mini-map（可選）
+#  小地圖 Mini-map
 # =======================
 MINI_SCALE = 0.075
-mini_map = pygame.transform.scale(map_img, (int(MAP_W * MINI_SCALE), int(MAP_H * MINI_SCALE)))
+mini_map = pygame.transform.scale(
+    map_img,
+    (int(MAP_W * MINI_SCALE), int(MAP_H * MINI_SCALE))
+)
 mini_pos = (WIDTH - mini_map.get_width() - 20, 20)
 
 # =======================
-#   玩家 Sprite 設定
+#  玩家 Sprite 讀取
 # =======================
 player_sprite = pygame.image.load("assets/player.png").convert_alpha()
-
 SPRITE_W = player_sprite.get_width() // 3
 SPRITE_H = player_sprite.get_height() // 4
 
-# ------------ 自動偵測腳底（前面你確定要） ------------
+
 def detect_foot_offset(sprite_img):
     w = SPRITE_W
     h = SPRITE_H
@@ -42,7 +50,7 @@ def detect_foot_offset(sprite_img):
     for r in range(4):
         for c in range(3):
             frame = sprite_img.subsurface(c*w, r*h, w, h)
-            for y in range(h-1, -1, -1):
+            for y in range(h - 1, -1, -1):
                 for x in range(w):
                     if frame.get_at((x, y)).a > 0:
                         max_bottom = max(max_bottom, y)
@@ -50,86 +58,108 @@ def detect_foot_offset(sprite_img):
                 else:
                     continue
                 break
-
     return (h - 1) - max_bottom
+
 
 FOOT_OFFSET = detect_foot_offset(player_sprite)
 
-player_x, player_y = MAP_W // 2, MAP_H // 2  # 角色出生點（地圖中央）
+player_x, player_y = MAP_W // 2, MAP_H // 2
 player_speed = 4
-anim_frame = 0
 direction = 2
+anim_frame = 1
 move_counter = 0
 
-
 # =======================
-#       Camera 跟隨系統
+# Camera 跟隨
 # =======================
 def get_camera_offset():
-    """讓角色保持螢幕中心（基於 sprite 中心）"""
-
-    # 角色中心（不包含 FOOT_OFFSET）
     target_x = player_x + SPRITE_W // 2
     target_y = player_y + SPRITE_H // 2
 
-    # camera 要對準角色中心
-    cam_x = target_x - WIDTH // 2
-    cam_y = target_y - HEIGHT // 2
-
-    # 限制 camera 不超出地圖
-    cam_x = max(0, min(cam_x, MAP_W - WIDTH))
-    cam_y = max(0, min(cam_y, MAP_H - HEIGHT))
+    cam_x = max(0, min(target_x - WIDTH // 2, MAP_W - WIDTH))
+    cam_y = max(0, min(target_y - HEIGHT // 2, MAP_H - HEIGHT))
 
     return cam_x, cam_y
 
 
-
-
 # =======================
-#     NPC 區域（套用地圖座標）
+# 建築物 hitbox（已校正）
 # =======================
 npcs = {
-    "管理大樓": pygame.Rect(686, 714, 80, 80),
-    "圖書館": pygame.Rect(1140, 744, 80, 80),
-    "工學大樓": pygame.Rect(1331, 833, 40, 40),
-    "活動中心": pygame.Rect(1575, 950, 300, 200)
+    "管理大樓": pygame.Rect(650, 738, 250, 220),
+    "第一醫學大樓": pygame.Rect(900, 880, 250, 240),
+    "第二醫學大樓": pygame.Rect(750, 880, 250, 240),
+    "工學大樓": pygame.Rect(1150, 900, 250, 220),
+    "圖書館": pygame.Rect(1080, 700, 250, 240),
+    "文物館": pygame.Rect(630, 950, 250, 220),
+
+    "明德宿舍": pygame.Rect(350, 350, 300, 250),
+    "莒德宿舍": pygame.Rect(1350, 400, 300, 240),
+    "育德宿舍": pygame.Rect(1850, 650, 260, 220),
+    "崇德宿舍": pygame.Rect(2100, 650, 260, 220),
+    "雲德宿舍": pygame.Rect(1950, 700, 260, 220),
+    "男教職員宿舍": pygame.Rect(2250, 720, 220, 200),
+
+    "活動中心": pygame.Rect(1500, 950, 420, 350),
+    "籃球場": pygame.Rect(1350, 1000, 240, 200),
+    "運動場": pygame.Rect(1700, 1150, 600, 500),
+    "網球場": pygame.Rect(1000, 300, 260, 180),
+    "羽球館": pygame.Rect(1900, 450, 260, 180),
+    "景觀湖": pygame.Rect(800, 1200, 320, 260),
+
+    "校門口": pygame.Rect(450, 1600, 500, 350),
+    "機車停車場": pygame.Rect(350, 1250, 350, 260),
+    "汽車停車場": pygame.Rect(650, 1500, 420, 300),
+    "公車站": pygame.Rect(1150, 1100, 250, 180),
+    "創辦人紀念公園": pygame.Rect(900, 1150, 300, 240),
 }
 
 npc_text = {
-    "管理大樓": "管理大樓：商管系主要上課地點。",
-    "圖書館": "圖書館：安靜自習、借書的好地方！",
-    "工學大樓": "工學大樓：資工、電機主要教室。",
-    "活動中心": "活動中心：社團、活動、健身房。"
+    "管理大樓": "管理大樓：企管、資管、醫管主要上課地點。",
+    "第一醫學大樓": "第一醫學大樓：基礎醫學課程與實驗室集中地。",
+    "第二醫學大樓": "第二醫學大樓：臨床與高年級醫學生課程。",
+    "工學大樓": "工學大樓：資工、電機、化工主要教室所在地。",
+    "圖書館": "圖書館：借書、自習、討論室熱門地點。",
+    "文物館": "文物館：台塑企業與校史展示館。",
+
+    "明德宿舍": "明德宿舍：安靜、靠近木棧道與網球場。",
+    "莒德宿舍": "莒德宿舍：靠近運動區的男宿舍。",
+    "育德宿舍": "育德宿舍：女生宿舍，生活便利。",
+    "崇德宿舍": "崇德宿舍：交通便利的宿舍區中心。",
+    "雲德宿舍": "雲德宿舍：鄰近操場及活動中心。",
+    "男教職員宿舍": "男教職員宿舍：教職員居住區。",
+
+    "活動中心": "活動中心：社團、健身房、多功能活動場館。",
+    "籃球場": "籃球場：最熱門的運動場地之一。",
+    "運動場": "運動場：體育課、運動會與夜跑場地。",
+    "網球場": "網球場：體育課與網球隊訓練場。",
+    "羽球館": "羽球館：體育課與社團使用空間。",
+    "景觀湖": "景觀湖：著名散步與拍照景點。",
+
+    "校門口": "校門口：公車、校車主要出入口。",
+    "機車停車場": "機車停車場：學生主要停車區。",
+    "汽車停車場": "汽車停車場：教職員與訪客使用。",
+    "公車站": "公車站：往醫院、科大、桃園方向。",
+    "創辦人紀念公園": "創辦人紀念公園：校園綠地休憩區。",
 }
 
 current_msg = ""
 
-
 # =======================
-#  畫角色
+# 畫角色
 # =======================
 def draw_player(camera):
     frame_rect = pygame.Rect(anim_frame * SPRITE_W, direction * SPRITE_H, SPRITE_W, SPRITE_H)
-    
-    # 取出該格 sprite
     frame = player_sprite.subsurface(frame_rect)
+    scaled = pygame.transform.scale(frame, (SPRITE_W // 2, SPRITE_H // 2))
 
-    # 縮小 50%
-    scaled_frame = pygame.transform.scale(frame, (SPRITE_W // 2, SPRITE_H // 2))
-
-    # 縮小後的位置（要微調讓腳底仍然踩地）
     screen.blit(
-        scaled_frame,
-        (
-            player_x - camera[0],
-            player_y - camera[1] + FOOT_OFFSET // 2   # offset 也等比例縮小
-        )
+        scaled,
+        (player_x - camera[0], player_y - camera[1] + FOOT_OFFSET // 2)
     )
 
-
-
 # =======================
-#  下方說明欄（永久顯示）
+# 下方資訊欄
 # =======================
 font = pygame.font.SysFont("Microsoft YaHei", 28)
 
@@ -142,33 +172,32 @@ def draw_message_bar():
 
 
 # =======================
-#        遊戲主迴圈
+# 主迴圈
 # =======================
 while True:
+    # Event handler
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
 
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_F1:
+                debug_mode = not debug_mode
+                print("Debug Mode =", debug_mode)
+
+            if event.key == pygame.K_F2:
+                show_pos = not show_pos
+                print("Show Position =", show_pos)
+
+    # Move
     moving = False
     keys = pygame.key.get_pressed()
 
-    if keys[pygame.K_w]:
-        player_y -= player_speed
-        direction = 0
-        moving = True
-    if keys[pygame.K_s]:
-        player_y += player_speed
-        direction = 2
-        moving = True
-    if keys[pygame.K_a]:
-        player_x -= player_speed
-        direction = 1
-        moving = True
-    if keys[pygame.K_d]:
-        player_x += player_speed
-        direction = 3
-        moving = True
+    if keys[pygame.K_w]: player_y -= player_speed; direction = 0; moving = True
+    if keys[pygame.K_s]: player_y += player_speed; direction = 2; moving = True
+    if keys[pygame.K_a]: player_x -= player_speed; direction = 1; moving = True
+    if keys[pygame.K_d]: player_x += player_speed; direction = 3; moving = True
 
     if moving:
         move_counter += 1
@@ -177,52 +206,39 @@ while True:
     else:
         anim_frame = 1
 
-    # 限制人物不能走出大地圖
+    # Clamp bounds
     player_x = max(0, min(player_x, MAP_W - SPRITE_W))
     player_y = max(0, min(player_y, MAP_H - SPRITE_H))
 
-    # Camera 跟隨
     camera = get_camera_offset()
 
-    # =======================
-    #   繪製地圖（依照 camera 偏移）
-    # =======================
+    # Draw map
     screen.blit(map_img, (-camera[0], -camera[1]))
 
-    # NPC 檢測（記得用地圖座標）
+    # Hitbox（修正版）
     current_msg = ""
-    # 縮小後 sprite 的寬高
-    player_rect = pygame.Rect(player_x, player_y, SPRITE_W, SPRITE_H)# ==== 計算人物「實際畫在畫面上的位置」 ====
-    draw_x = player_x
-    draw_y = player_y + FOOT_OFFSET // 2   # 與 draw_player 完全一致！！！
 
-
-    # ==== hitbox 使用縮小後尺寸 ====
-    hit_w = SPRITE_W // 2
-    hit_h = SPRITE_H // 2
-
-    # ==== 角色 hitbox 必須貼在人物腳底（搖桿型判定） ====
     player_rect = pygame.Rect(
-        draw_x,
-        draw_y - hit_h,   # 讓 hitbox 從腳往上長
-        hit_w,
-        hit_h
-)
-
-
-
-
-
+        player_x,
+        player_y,
+        SPRITE_W // 2,
+        SPRITE_H // 2
+    )
 
     for name, rect in npcs.items():
         if player_rect.colliderect(rect):
             current_msg = npc_text[name]
 
-        # 畫 NPC 區域（畫面座標 = 地圖座標 - camera）
-        debug_rect = pygame.Rect(rect.x - camera[0], rect.y - camera[1], rect.w, rect.h)
-        pygame.draw.rect(screen, (255, 255, 0), debug_rect, 2)
+        if debug_mode:
+            debug_rect = pygame.Rect(
+                rect.x - camera[0],
+                rect.y - camera[1],
+                rect.w,
+                rect.h
+            )
+            pygame.draw.rect(screen, (255, 255, 0), debug_rect, 2)
 
-    # 畫角色
+    # Draw player
     draw_player(camera)
 
     # Mini-map
@@ -231,14 +247,12 @@ while True:
     mini_py = int(player_y / MAP_H * mini_map.get_height()) + mini_pos[1]
     pygame.draw.circle(screen, (255, 0, 0), (mini_px, mini_py), 4)
 
-    # 下方說明欄（永久顯示）
+    # Bottom Message Bar
     draw_message_bar()
-    # 顯示世界座標（方便手動調 NPC）
-    mx, my = pygame.mouse.get_pos()
-    world_x = mx + camera[0]
-    world_y = my + camera[1]
-    print("世界座標:", world_x, world_y)
 
+    # F2：終端機即時座標輸出
+    if show_pos:
+        print(f"Player World Pos = ({player_x}, {player_y})")
 
     pygame.display.update()
     clock.tick(60)
